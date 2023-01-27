@@ -1,0 +1,46 @@
+{
+  "name": "sc-indexer",
+  "version": "1.0.0",
+  "description": "A super fast, low level events indexer for smart contracts on Ethereum. This package allows for efficient indexing and querying of events emitted by smart contracts on the Ethereum blockchain.",
+  "main": "sc-indexer.js",
+  "scripts": {
+    "test": "npm run dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azizaiden/sc-indexer.git"
+  },
+  "keywords": [
+    "ethereum",
+    "smartcontract",
+    "contract",
+    "sc",
+    "indexer",
+    "indexing"
+  ],
+  "author": "Aziz Aiden",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/azizaiden/sc-indexer/issues"
+  },
+  "dependencies": {
+    "abi-decoder": "^2.4.0",
+    "babel-core": "^6.26.0",
+    "babel-polyfill": "^6.26.0",
+    "bignumber.js": "^5.0.0",
+    "bottleneck": "^2.19.5",
+    "ethjs": "^0.3.3",
+    "ethjs-query": "^0.2.6",
+    "mongodb": "^3.0.2",
+    "web3": "^1.8.1",
+    "winston": "3.0.0-rc0"
+  },
+  "devDependencies": {
+    "eslint": "^8.32.0",
+    "eslint-config-standard": "^17.0.0",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-n": "^15.6.1",
+    "eslint-plugin-promise": "^6.1.1"
+  },
+  "homepage": "https://github.com/azizaiden/sc-indexer#readme"
+}
