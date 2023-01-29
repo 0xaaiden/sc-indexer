@@ -2,7 +2,7 @@
 import fs from 'fs'
 import path from 'path'
 import rimraf from 'rimraf'
-import { serialize, unserialize } from '../utils'
+import { serialize, unserialize } from '../utils.js'
 
 export default class FileStore {
   constructor (indexing, dbPath) {
@@ -17,7 +17,7 @@ export default class FileStore {
   }
 
   async reset () {
-    await new Promise(accept => rimraf(this.dbPath, accept))
+    await new Promise(resolve => rimraf(this.dbPath, resolve))
     this.init()
   }
 

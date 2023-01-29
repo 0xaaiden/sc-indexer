@@ -1,14 +1,21 @@
 
 import { promisify } from 'util'
-import { MongoClient } from 'mongodb'
-import { serialize, unserialize } from '../utils'
+import mongodb from 'mongodb'
+import { serialize, unserialize } from '../utils.js'
 
-const mongodbInsertMany = (collection, events) => new Promise((accept, reject) => {
+const MongoClient = mongodb
+
+const mongodbInsertMany = (collection, events) => new Promise((resolve, reject) => {
   collection.insertMany(events, (err) => {
     if (err) return reject(err)
-    return accept()
+    return resolve()
   })
 })
+
+const MondgoDbOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}
 
 export default class MongodbStore {
   constructor (indexing, mongodbUrl) {
@@ -21,7 +28,7 @@ export default class MongodbStore {
     if (!this.db) {
       // console.log('initbs.db');
       const mongoConnect = promisify(MongoClient.connect).bind(MongoClient)
-      this.client = await mongoConnect(this.mongodbUrl)
+      this.client = await mongoConnect(this.mongodbUrl, MondgoDbOptions)
       const mongoPath = this.mongodbUrl.split('/')
       this.db = this.client.db(mongoPath.slice(-1)[0])
       // console.log('client.db', this.client);
@@ -66,10 +73,10 @@ export default class MongodbStore {
     const collection = this.db.collection(eventType)
     const query = {}
     query[`args.${indexId}`] = value
-    return new Promise((accept, reject) => {
+    return new Promise((resolve, reject) => {
       collection.find(query).toArray((err, result) => {
         if (err) return reject(err)
-        return accept(result.map(item => unserialize(item)))
+        return resolve(result.map(item => unserialize(item)))
       })
     })
   }

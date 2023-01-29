@@ -4,7 +4,7 @@ import EthQuery from 'ethjs-query'
 import Web3 from 'web3'
 import Bottleneck from 'bottleneck'
 import abiDecoder from 'abi-decoder'
-import logger from './logger'
+import logger from './logger.js'
 
 const normalizeEvent = (event) => {
   const normalizedEvent = Object.assign({}, event)
@@ -122,8 +122,8 @@ export default class Ethereum {
   }
 
   async clientStatus () {
-    const syncing = await this.readEthQuery.syncing()
-    const blockNumber = await this.readEthQuery.blockNumber()
+    const syncing = await this.web3.eth.isSyncing()
+    const blockNumber = await this.web3.eth.getBlockNumber()
     return {
       syncing,
       blockNumber

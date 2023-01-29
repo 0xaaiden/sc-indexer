@@ -1,23 +1,24 @@
+/* eslint-disable no-unused-vars */
 
 import BigNumber from 'bignumber.js'
 
-import logger from './src/logger'
-import Ethereum from './src/ethereum'
+import logger from './logger.js'
+import Ethereum from './ethereum.js'
 
-import fileStore from './src/stores/file'
-import mongodbStore from './src/stores/mongodb'
-import { serialize, unserialize } from './src/utils'
+import fileStore from './stores/file.js'
+import mongodbStore from './stores/mongodb.js'
+import { serialize, unserialize } from './utils.js'
 
 export const stores = {
-  file: fileStore,
-  mongodb: mongodbStore
+  File: fileStore,
+  Mongodb: mongodbStore
 }
 
-export const utils = {
+const utils = {
   serialize, unserialize
 }
 
-const waitForBlockchainSync = client => new Promise((accept) => {
+const waitForBlockchainSync = client => new Promise((resolve) => {
   let i = 0
   const getAndCheckStatus = (callback) => {
     client.clientStatus().then((status) => {
@@ -32,29 +33,28 @@ const waitForBlockchainSync = client => new Promise((accept) => {
       i += 1
     })
   }
-  getAndCheckStatus(() => accept())
+  getAndCheckStatus(() => resolve())
 })
 
-class Indexer {
+export class Indexer {
   constructor (
     store,
     abi, contractAddress, readProviderUrl = 'http://127.0.0.1:8545', events
   ) {
     this.store = store
-    // console.log('i did init that bs');
     this.blockchain = new Ethereum(abi, contractAddress, readProviderUrl)
     this.limiter = this.blockchain.limiter
   }
 
   async syncAll ({
-    chunkSize, fromBlock, toBlockNum = null, eventsList
+    fromBlock, toBlockNum = null, chunkSize, events
   }) {
     // wait for db to connect
+    const eventsList = Object.keys(events)
     const dbpromise = await this.store.init()
     const clientStatus = await this.blockchain.clientStatus()
     const { syncing, blockNumber } = clientStatus
     const toBlock = toBlockNum || blockNumber
-    console.log('block number: ', toBlock)
     logger.log('warn', `Current status of Ethereum client: syncing=${JSON.stringify(syncing)}, blockNumber=${blockNumber}`)
     if (syncing) {
       await waitForBlockchainSync(this.blockchain)
@@ -92,14 +92,14 @@ class Indexer {
     //   }
     // }
 
-    this.blockchain.readNewEvents(toBlock, async (event) => {
-      logger.log('info', `Processing real-time Ethereum ${event.event} event`)
-      const normalizeEvent = event
-      normalizeEvent.blockNumber = new BigNumber(normalizeEvent.blockNumber)
-      normalizeEvent.transactionIndex = new BigNumber(normalizeEvent.transactionIndex)
-      normalizeEvent.logIndex = new BigNumber(normalizeEvent.logIndex)
-      this.store.put([normalizeEvent])
-    })
+    // this.blockchain.readNewEvents(toBlock, async (event) => {
+    //   logger.log('info', `Processing real-time Ethereum ${event.event} event`)
+    //   const normalizeEvent = event
+    //   normalizeEvent.blockNumber = new BigNumber(normalizeEvent.blockNumber)
+    //   normalizeEvent.transactionIndex = new BigNumber(normalizeEvent.transactionIndex)
+    //   normalizeEvent.logIndex = new BigNumber(normalizeEvent.logIndex)
+    //   this.store.put([normalizeEvent])
+    // })
 
     this.blockchain.readAllEvents(
       fromBlock,
@@ -124,5 +124,3 @@ class Indexer {
     )
   }
 }
-
-module.exports = Indexer
