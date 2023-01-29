@@ -1,5 +1,6 @@
 
 # SC Indexer
+[![Node version](https://badge.fury.io/js/sc-indexer.svg)](https://www.npmjs.com/package/sc-indexer)
 
 A fast and low-level Ethereum indexer that can be used to index Ethereum events from a smart contract and store them into different types of databases. It supports File System and MongoDB as a database at the moment.
 

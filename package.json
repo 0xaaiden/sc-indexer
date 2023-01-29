@@ -1,6 +1,6 @@
 {
   "name": "sc-indexer",
-  "version": "0.0.51",
+  "version": "0.0.52",
   "description": "A super fast, low level events indexer for smart contracts on Ethereum. This package allows for efficient indexing and querying of events emitted by smart contracts on the Ethereum blockchain.",
   "main": "index.js",
   "scripts": {
