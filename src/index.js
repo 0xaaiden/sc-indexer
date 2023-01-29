@@ -48,7 +48,7 @@ export class Indexer {
   }
 
   async syncAll ({
-    fromBlock, toBlockNum = null, chunkSize, live = false
+    fromBlock, toBlockNum = null, chunkSize = 200, live = false
   }) {
     const dbpromise = await this.store.init()
     const clientStatus = await this.blockchain.clientStatus()
