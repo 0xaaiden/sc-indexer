@@ -67,14 +67,14 @@ var waitForBlockchainSync = function waitForBlockchainSync(client) {
 };
 
 var Indexer = exports.Indexer = function () {
-  function Indexer(store, abi, contractAddress) {
-    var readProviderUrl = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 'http://127.0.0.1:8545';
-    var events = arguments[4];
+  function Indexer(store, abi, contractAddress, events) {
+    var readProviderUrl = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : 'http://127.0.0.1:8545';
 
     _classCallCheck(this, Indexer);
 
+    var eventsList = Object.keys(events);
     this.store = store;
-    this.blockchain = new _ethereum2.default(abi, contractAddress, readProviderUrl);
+    this.blockchain = new _ethereum2.default(abi, eventsList, contractAddress, readProviderUrl);
     this.limiter = this.blockchain.limiter;
   }
 
@@ -87,17 +87,18 @@ var Indexer = exports.Indexer = function () {
           _ref$toBlockNum = _ref.toBlockNum,
           toBlockNum = _ref$toBlockNum === undefined ? null : _ref$toBlockNum,
           chunkSize = _ref.chunkSize,
-          events = _ref.events;
+          _ref$live = _ref.live,
+          live = _ref$live === undefined ? false : _ref$live;
 
-      // wait for db to connect
-      var eventsList = Object.keys(events);
       var dbpromise = await this.store.init();
       var clientStatus = await this.blockchain.clientStatus();
       var syncing = clientStatus.syncing,
-          blockNumber = clientStatus.blockNumber;
+          blockNumber = clientStatus.blockNumber,
+          connected = clientStatus.connected;
 
       var toBlock = toBlockNum || blockNumber;
-      _logger2.default.log('warn', 'Current status of Ethereum client: syncing=' + JSON.stringify(syncing) + ', blockNumber=' + blockNumber);
+      var liveIndex = live;
+      _logger2.default.log('warn', 'Current status of Ethereum client: syncing=' + JSON.stringify(syncing) + ', blockNumber=' + blockNumber + ', connected=' + connected);
       if (syncing) {
         await waitForBlockchainSync(this.blockchain);
       }
@@ -133,25 +134,26 @@ var Indexer = exports.Indexer = function () {
       //     skipBlocks = { min: fromBlock, max: blockInfo.blockNumber };
       //   }
       // }
+      if (liveIndex) {
+        this.blockchain.readNewEvents(toBlock, async function (event) {
+          _logger2.default.log('info', 'Processing real-time Ethereum ' + event.event + ' event');
+          // const normalizeEvent = event
+          // normalizeEvent.blockNumber = new BigNumber(normalizeEvent.blockNumber)
+          // normalizeEvent.transactionIndex = new BigNumber(normalizeEvent.transactionIndex)
+          // normalizeEvent.logIndex = new BigNumber(normalizeEvent.logIndex)
+          _this.store.put([event]);
+        });
+      }
 
-      // this.blockchain.readNewEvents(toBlock, async (event) => {
-      //   logger.log('info', `Processing real-time Ethereum ${event.event} event`)
-      //   const normalizeEvent = event
-      //   normalizeEvent.blockNumber = new BigNumber(normalizeEvent.blockNumber)
-      //   normalizeEvent.transactionIndex = new BigNumber(normalizeEvent.transactionIndex)
-      //   normalizeEvent.logIndex = new BigNumber(normalizeEvent.logIndex)
-      //   this.store.put([normalizeEvent])
-      // })
-
-      this.blockchain.readAllEvents(fromBlock, toBlock, chunkSize, eventsList, async function (result) {
+      this.blockchain.readAllEvents(fromBlock, toBlock, chunkSize, async function (result) {
         var range = result.constructQuery;
-        var events = result.result;
+        var eventsAll = result.result;
         // console.log('events: ', events.length, 'range: ', range);
         _logger2.default.log('info', '[' + range.fromBlock + ', ' + range.toBlock + '] Processed');
-        eventsCount += events.length;
+        eventsCount += eventsAll.length;
         blocksCount += range.toBlock - range.fromBlock;
-        if (events.length > 0) {
-          await _this.store.put(events);
+        if (eventsAll.length > 0) {
+          await _this.store.put(eventsAll);
         }
         // if (this.store.saveBlockInfo) {
         //   this.store.saveBlockInfo({ blockNumber: status.blockNumber }).then(() => {});

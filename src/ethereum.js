@@ -1,36 +1,25 @@
-import BigNumber from 'bignumber.js'
-import Eth from 'ethjs'
-import EthQuery from 'ethjs-query'
+// import BigNumber from 'bignumber.js'
 import Web3 from 'web3'
 import Bottleneck from 'bottleneck'
 import abiDecoder from 'abi-decoder'
 import logger from './logger.js'
 
-const normalizeEvent = (event) => {
-  const normalizedEvent = Object.assign({}, event)
-  if (typeof normalizeEvent.blockNumber === 'number') {
-    normalizeEvent.blockNumber = new BigNumber(normalizeEvent.blockNumber)
-  }
-  if (typeof normalizeEvent.transactionIndex === 'number') {
-    normalizeEvent.transactionIndex = new BigNumber(normalizeEvent.transactionIndex)
-  }
-  if (typeof normalizeEvent.logIndex === 'number') {
-    normalizeEvent.logIndex = new BigNumber(normalizeEvent.logIndex)
-  }
-  return normalizedEvent
-}
-
 export default class Ethereum {
-  constructor (abi, contractAddress, readProviderUrl) {
+  constructor (abi, eventsList, contractAddress, readProviderUrl) {
     this.readProviderUrl = readProviderUrl
     this.contractAddress = contractAddress
     this.abi = abi
-    this.readEthQuery = new EthQuery(new Eth.HttpProvider(readProviderUrl))
-    // this.web3 = new Web3(new Web3.providers.HttpProvider(readProviderUrl));
     // wss connection
-    this.web3 = new Web3(new Web3.providers.HttpProvider(readProviderUrl))
+    this.web3 = new Web3(this.readProviderUrl)
     abiDecoder.addABI(abi)
     this.web3Contract = new this.web3.eth.Contract(abi, contractAddress)
+
+    // constuct events signatures
+    this.eventsSignatures = []
+    for (let i = 0; i < eventsList.length; i += 1) {
+      const eventSignature = this.constructEventSignature(eventsList[i])
+      this.eventsSignatures.push(eventSignature)
+    }
 
     this.limiter = new Bottleneck({
       maxConcurrent: 3,
@@ -97,6 +86,7 @@ export default class Ethereum {
       address: this.contractAddress,
       topics: [this.eventsSignatures]
     }
+    console.log('options', options)
     const filter = this.web3.eth.subscribe('logs', options)
 
     filter.on('connected', (subscriptionId) => {
@@ -108,49 +98,38 @@ export default class Ethereum {
 
     filter.on('data', (event) => {
       const eventClone = event
-      const decodedEvent = abiDecoder.decodeLogs([event])
-      eventClone.args = decodedEvent[0].args
-      eventClone.event = event.args.name
-
-      const normalizedEvent = normalizeEvent(event)
-      if (!normalizedEvent) {
-        logger.log('warn', `Got error while reading realtime events from contract: ${normalizedEvent}`)
-      } else {
-        fn(normalizedEvent).then(() => {})
-      }
+      const decodedEvent = abiDecoder.decodeLogs([eventClone])
+      eventClone.args = decodedEvent[0]
+      eventClone.event = eventClone.args.name
+      fn(eventClone).then(() => {})
     })
   }
 
   async clientStatus () {
     const syncing = await this.web3.eth.isSyncing()
+    const connected = await this.web3.eth.net.isListening()
     const blockNumber = await this.web3.eth.getBlockNumber()
     return {
       syncing,
-      blockNumber
+      blockNumber,
+      connected
     }
   }
 
-  async readAllEvents (fromBlock, toBlock, chunkSize, eventsList, fn) {
+  async readAllEvents (fromBlock, toBlock, chunkSize, fn) {
     const blockChunks = []
     const maxBlockChunkSize = chunkSize
     // get events signatures for all events and print them
-    const eventsSignatures = []
-
-    for (let i = 0; i < eventsList.length; i += 1) {
-      const eventSignature = this.constructEventSignature(eventsList[i])
-      eventsSignatures.push(eventSignature)
-    }
-    this.eventsSignatures = eventsSignatures
     let currentStart = fromBlock
-    while (currentStart < toBlock) {
+    while (currentStart <= toBlock) {
       const currentEnd = Math.min(currentStart + maxBlockChunkSize, toBlock)
       blockChunks.push({ start: currentStart, end: currentEnd })
       currentStart = currentEnd + 1
     }
-    const blockPromises = blockChunks.map(range => this.limiter.schedule({ range }, this.getEventsForBlock.bind(this), range).then((events) => {
-      events.constructQuery.fromBlock = range.start
-      events.constructQuery.toBlock = range.end
-      fn(events)
+    const blockPromises = blockChunks.map(range => this.limiter.schedule({ range }, this.getEventsForBlock.bind(this), range).then((eventsAll) => {
+      eventsAll.constructQuery.fromBlock = range.start
+      eventsAll.constructQuery.toBlock = range.end
+      fn(eventsAll)
     }))
     const events = await Promise.all(blockPromises)
     logger.log('events are ready', 'length', events.length)

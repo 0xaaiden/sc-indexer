@@ -4,19 +4,8 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }(); // import BigNumber from 'bignumber.js'
 
-var _bignumber = require('bignumber.js');
-
-var _bignumber2 = _interopRequireDefault(_bignumber);
-
-var _ethjs = require('ethjs');
-
-var _ethjs2 = _interopRequireDefault(_ethjs);
-
-var _ethjsQuery = require('ethjs-query');
-
-var _ethjsQuery2 = _interopRequireDefault(_ethjsQuery);
 
 var _web = require('web3');
 
@@ -40,33 +29,24 @@ function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-var normalizeEvent = function normalizeEvent(event) {
-  var normalizedEvent = Object.assign({}, event);
-  if (typeof normalizeEvent.blockNumber === 'number') {
-    normalizeEvent.blockNumber = new _bignumber2.default(normalizeEvent.blockNumber);
-  }
-  if (typeof normalizeEvent.transactionIndex === 'number') {
-    normalizeEvent.transactionIndex = new _bignumber2.default(normalizeEvent.transactionIndex);
-  }
-  if (typeof normalizeEvent.logIndex === 'number') {
-    normalizeEvent.logIndex = new _bignumber2.default(normalizeEvent.logIndex);
-  }
-  return normalizedEvent;
-};
-
 var Ethereum = function () {
-  function Ethereum(abi, contractAddress, readProviderUrl) {
+  function Ethereum(abi, eventsList, contractAddress, readProviderUrl) {
     _classCallCheck(this, Ethereum);
 
     this.readProviderUrl = readProviderUrl;
     this.contractAddress = contractAddress;
     this.abi = abi;
-    this.readEthQuery = new _ethjsQuery2.default(new _ethjs2.default.HttpProvider(readProviderUrl));
-    // this.web3 = new Web3(new Web3.providers.HttpProvider(readProviderUrl));
     // wss connection
-    this.web3 = new _web2.default(new _web2.default.providers.HttpProvider(readProviderUrl));
+    this.web3 = new _web2.default(this.readProviderUrl);
     _abiDecoder2.default.addABI(abi);
     this.web3Contract = new this.web3.eth.Contract(abi, contractAddress);
+
+    // constuct events signatures
+    this.eventsSignatures = [];
+    for (var i = 0; i < eventsList.length; i += 1) {
+      var eventSignature = this.constructEventSignature(eventsList[i]);
+      this.eventsSignatures.push(eventSignature);
+    }
 
     this.limiter = new _bottleneck2.default({
       maxConcurrent: 3,
@@ -145,6 +125,7 @@ var Ethereum = function () {
         address: this.contractAddress,
         topics: [this.eventsSignatures]
       };
+      console.log('options', options);
       var filter = this.web3.eth.subscribe('logs', options);
 
       filter.on('connected', function (subscriptionId) {
@@ -156,54 +137,43 @@ var Ethereum = function () {
 
       filter.on('data', function (event) {
         var eventClone = event;
-        var decodedEvent = _abiDecoder2.default.decodeLogs([event]);
-        eventClone.args = decodedEvent[0].args;
-        eventClone.event = event.args.name;
-
-        var normalizedEvent = normalizeEvent(event);
-        if (!normalizedEvent) {
-          _logger2.default.log('warn', 'Got error while reading realtime events from contract: ' + normalizedEvent);
-        } else {
-          fn(normalizedEvent).then(function () {});
-        }
+        var decodedEvent = _abiDecoder2.default.decodeLogs([eventClone]);
+        eventClone.args = decodedEvent[0];
+        eventClone.event = eventClone.args.name;
+        fn(eventClone).then(function () {});
       });
     }
   }, {
     key: 'clientStatus',
     value: async function clientStatus() {
       var syncing = await this.web3.eth.isSyncing();
+      var connected = await this.web3.eth.net.isListening();
       var blockNumber = await this.web3.eth.getBlockNumber();
       return {
         syncing: syncing,
-        blockNumber: blockNumber
+        blockNumber: blockNumber,
+        connected: connected
       };
     }
   }, {
     key: 'readAllEvents',
-    value: async function readAllEvents(fromBlock, toBlock, chunkSize, eventsList, fn) {
+    value: async function readAllEvents(fromBlock, toBlock, chunkSize, fn) {
       var _this = this;
 
       var blockChunks = [];
       var maxBlockChunkSize = chunkSize;
       // get events signatures for all events and print them
-      var eventsSignatures = [];
-
-      for (var i = 0; i < eventsList.length; i += 1) {
-        var eventSignature = this.constructEventSignature(eventsList[i]);
-        eventsSignatures.push(eventSignature);
-      }
-      this.eventsSignatures = eventsSignatures;
       var currentStart = fromBlock;
-      while (currentStart < toBlock) {
+      while (currentStart <= toBlock) {
         var currentEnd = Math.min(currentStart + maxBlockChunkSize, toBlock);
         blockChunks.push({ start: currentStart, end: currentEnd });
         currentStart = currentEnd + 1;
       }
       var blockPromises = blockChunks.map(function (range) {
-        return _this.limiter.schedule({ range: range }, _this.getEventsForBlock.bind(_this), range).then(function (events) {
-          events.constructQuery.fromBlock = range.start;
-          events.constructQuery.toBlock = range.end;
-          fn(events);
+        return _this.limiter.schedule({ range: range }, _this.getEventsForBlock.bind(_this), range).then(function (eventsAll) {
+          eventsAll.constructQuery.fromBlock = range.start;
+          eventsAll.constructQuery.toBlock = range.end;
+          fn(eventsAll);
         });
       });
       var events = await Promise.all(blockPromises);

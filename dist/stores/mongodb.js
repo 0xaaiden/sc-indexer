@@ -22,9 +22,9 @@ var MongoClient = _mongodb2.default;
 
 var mongodbInsertMany = function mongodbInsertMany(collection, events) {
   return new Promise(function (resolve, reject) {
-    collection.insertMany(events, function (err) {
-      if (err) return reject(err);
-      return resolve();
+    collection.insertMany(events, { ordered: false }, function (err) {
+      console.log('duplicate events detected, skipping event');
+      resolve(err);
     });
   });
 };
@@ -97,6 +97,7 @@ var MongodbStore = function () {
 
           // console.log('db', this.db);
           var collection = this.db.collection(eventType);
+          this.db.collection(eventType).createIndex({ transactionHash: 1, logIndex: 1 }, { unique: true });
           var serializedEvents = byCollection[eventType].map(function (event) {
             return (0, _utils.serialize)(event);
           });

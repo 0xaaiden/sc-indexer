@@ -6,10 +6,11 @@ import { serialize, unserialize } from '../utils.js'
 const MongoClient = mongodb
 
 const mongodbInsertMany = (collection, events) => new Promise((resolve, reject) => {
-  collection.insertMany(events, (err) => {
-    if (err) return reject(err)
-    return resolve()
-  })
+  collection.insertMany(events, { ordered: false }, (err) => {
+    console.log('duplicate events detected, skipping event')
+    resolve(err)
+  }
+  )
 })
 
 const MondgoDbOptions = {
@@ -64,6 +65,7 @@ export default class MongodbStore {
     for (const eventType of Object.keys(byCollection)) {
       // console.log('db', this.db);
       const collection = this.db.collection(eventType)
+      this.db.collection(eventType).createIndex({ transactionHash: 1, logIndex: 1 }, { unique: true })
       const serializedEvents = byCollection[eventType].map(event => serialize(event))
       await mongodbInsertMany(collection, serializedEvents)
     }

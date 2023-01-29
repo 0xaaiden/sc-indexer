@@ -29,8 +29,6 @@
     "abi-decoder": "^2.4.0",
     "bignumber.js": "^5.0.0",
     "bottleneck": "^2.19.5",
-    "ethjs": "^0.3.3",
-    "ethjs-query": "^0.2.6",
     "mongodb": "^3.0.2",
     "web3": "^1.8.1",
     "winston": "3.0.0-rc0"

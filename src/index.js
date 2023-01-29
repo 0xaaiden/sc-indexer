@@ -39,23 +39,23 @@ const waitForBlockchainSync = client => new Promise((resolve) => {
 export class Indexer {
   constructor (
     store,
-    abi, contractAddress, readProviderUrl = 'http://127.0.0.1:8545', events
+    abi, contractAddress, events, readProviderUrl = 'http://127.0.0.1:8545'
   ) {
+    const eventsList = Object.keys(events)
     this.store = store
-    this.blockchain = new Ethereum(abi, contractAddress, readProviderUrl)
+    this.blockchain = new Ethereum(abi, eventsList, contractAddress, readProviderUrl)
     this.limiter = this.blockchain.limiter
   }
 
   async syncAll ({
-    fromBlock, toBlockNum = null, chunkSize, events
+    fromBlock, toBlockNum = null, chunkSize, live = false
   }) {
-    // wait for db to connect
-    const eventsList = Object.keys(events)
     const dbpromise = await this.store.init()
     const clientStatus = await this.blockchain.clientStatus()
-    const { syncing, blockNumber } = clientStatus
+    const { syncing, blockNumber, connected } = clientStatus
     const toBlock = toBlockNum || blockNumber
-    logger.log('warn', `Current status of Ethereum client: syncing=${JSON.stringify(syncing)}, blockNumber=${blockNumber}`)
+    const liveIndex = live
+    logger.log('warn', `Current status of Ethereum client: syncing=${JSON.stringify(syncing)}, blockNumber=${blockNumber}, connected=${connected}`)
     if (syncing) {
       await waitForBlockchainSync(this.blockchain)
     }
@@ -91,30 +91,30 @@ export class Indexer {
     //     skipBlocks = { min: fromBlock, max: blockInfo.blockNumber };
     //   }
     // }
-
-    // this.blockchain.readNewEvents(toBlock, async (event) => {
-    //   logger.log('info', `Processing real-time Ethereum ${event.event} event`)
-    //   const normalizeEvent = event
-    //   normalizeEvent.blockNumber = new BigNumber(normalizeEvent.blockNumber)
-    //   normalizeEvent.transactionIndex = new BigNumber(normalizeEvent.transactionIndex)
-    //   normalizeEvent.logIndex = new BigNumber(normalizeEvent.logIndex)
-    //   this.store.put([normalizeEvent])
-    // })
+    if (liveIndex) {
+      this.blockchain.readNewEvents(toBlock, async (event) => {
+        logger.log('info', `Processing real-time Ethereum ${event.event} event`)
+        // const normalizeEvent = event
+        // normalizeEvent.blockNumber = new BigNumber(normalizeEvent.blockNumber)
+        // normalizeEvent.transactionIndex = new BigNumber(normalizeEvent.transactionIndex)
+        // normalizeEvent.logIndex = new BigNumber(normalizeEvent.logIndex)
+        this.store.put([event])
+      })
+    }
 
     this.blockchain.readAllEvents(
       fromBlock,
       toBlock,
       chunkSize,
-      eventsList,
       async (result) => {
         const range = result.constructQuery
-        const events = result.result
+        const eventsAll = result.result
         // console.log('events: ', events.length, 'range: ', range);
         logger.log('info', `[${range.fromBlock}, ${range.toBlock}] Processed`)
-        eventsCount += events.length
+        eventsCount += eventsAll.length
         blocksCount += (range.toBlock - range.fromBlock)
-        if (events.length > 0) {
-          await this.store.put(events)
+        if (eventsAll.length > 0) {
+          await this.store.put(eventsAll)
         }
         // if (this.store.saveBlockInfo) {
         //   this.store.saveBlockInfo({ blockNumber: status.blockNumber }).then(() => {});
